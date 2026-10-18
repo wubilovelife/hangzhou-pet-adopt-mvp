@@ -40,7 +40,7 @@ authUser=result.user;await loadOnlineMine();go('profile');toast('登录成功');
 async function logoutOnline(){await api.auth.signOut();authUser=null;render();}
 async function loadOnlinePets(){const {data:rows,error}=await api.from('pets').select('id,name,species,district,age_text,profile,status,photo_urls').eq('status','approved').order('created_at',{ascending:false});
 if(error){toast('宠物列表暂时无法加载');return;}
-data.pets=rows.map(p=>({id:p.id,name:p.name,type:p.species==='cat'?'猫咪':'狗狗',age:p.age_text||'',sex:p.profile?.sex||'',district:p.district||'杭州',sterilized:p.profile?.sterilized||'',vaccinated:p.profile?.vaccinated||'',story:p.profile?.reason||'',requirements:p.profile?.requirements||'',img:p.photo_urls?.[0]||'https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=600&auto=format&fit=crop'}));
+data.pets=rows.map(p=>({id:p.id,name:p.name,type:p.species==='cat'?'猫咪':'狗狗',age:p.age_text||'',sex:p.profile?.sex||'',district:p.district||'杭州',sterilized:p.profile?.sterilized||'',vaccinated:p.profile?.vaccinated||'',story:p.profile?.reason||'',requirements:p.profile?.requirements||'',img:(p.profile?.photo_paths?.length?'https://cqsdplpaniumjqpkgqgt.supabase.co/functions/v1/public-approved-pet-image?pet_id='+encodeURIComponent(p.id)+'&index=0':p.photo_urls?.[0]||'')}));
 onlinePetsLoaded=true;render();}
 async function loadOnlineMine(){
 if(!authUser)return;
