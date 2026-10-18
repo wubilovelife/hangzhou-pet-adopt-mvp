@@ -4,9 +4,26 @@
 
 const api=window.supabase.createClient('https://cqsdplpaniumjqpkgqgt.supabase.co','sb_publishable_dGgKw7TNY8Cufp8n9Db3Mw_7U9X942W',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 let authUser=null,onlinePetsLoaded=false;const pendingFiles={};let postSubmitting=false,postFeedback='',lastSubmittedPet=null,postPhase='';
+async function prepareUploadImage(file){
+ if(!file.type.startsWith('image/')&&!/\.(heic|heif|jpg|jpeg|png|webp)$/i.test(file.name))throw Error('请上传照片文件');
+ const url=URL.createObjectURL(file);
+ try{
+  const img=new Image();
+  await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(new Error('无法读取这张iPhone照片，请在相册中存储为JPEG后重新选择'));img.src=url});
+  const scale=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
+  const canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+  const ctx=canvas.getContext('2d');if(!ctx)throw Error('浏览器无法处理此图片');
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',0.78));
+  if(!blob)throw Error('照片压缩失败，请转换为JPEG后重新上传');
+  return new File([blob],file.name.replace(/\.[^.]+$/, '')+'.jpg',{type:'image/jpeg'});
+ }finally{URL.revokeObjectURL(url)}
+}
 async function uploadPending(bucket,kind,key){
 const files=pendingFiles[kind+':'+key]||[],uploaded=[];
-for(const file of files){
+for(const originalFile of files){
+const file=(bucket==='hz-adoption-private'&&key==='homePhotos')?await prepareUploadImage(originalFile):originalFile;
 if(file.size>20971520)throw Error('单个附件不可超过20MB');
 const suffix=(file.name.split('.').pop()||'bin').toLowerCase();
 const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
@@ -94,7 +111,7 @@ if(formStep<3){formStep++;render();return}
 if(![0,1,2,3,4].every(i=>d['promise'+i]))return toast('请勾选全部承诺');
 if(!await refreshAuth()){toast('请先通过邮箱登录');go('profile');return}
 if(!/^[0-9a-f]{8}-[0-9a-f-]{27,}$/i.test(String(d.petId))){toast('该宠物尚未进入正式审核数据库，暂不能申请');return}
-let photos=[];try{photos=await uploadPending('hz-adoption-private','draft','homePhotos')}catch(e){toast('居家照片上传失败：'+e.message);return}if(!photos.length){toast('请重新选择居家照片');return}const payload={pet_id:d.petId,applicant_id:authUser.id,form_data:{...d,petId:undefined,home_photo_paths:photos},status:'pending_platform'};
+let photos=[];try{photos=await uploadPending('hz-adoption-private','draft','homePhotos')}catch(e){formStep=0;render();toast('居家照片上传失败：'+e.message);return}if(!photos.length){toast('请重新选择居家照片');return}const payload={pet_id:d.petId,applicant_id:authUser.id,form_data:{...d,petId:undefined,home_photo_paths:photos},status:'pending_platform'};
 const {error}=await api.from('adoption_applications').insert(payload);
 if(error){toast('提交失败：'+error.message);return}
 data.draft={};save();await loadOnlineMine();go('myApps');toast('已提交至平台审核');
