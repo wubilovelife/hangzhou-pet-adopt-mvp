@@ -4,7 +4,20 @@
 
 const api=window.supabase.createClient('https://cqsdplpaniumjqpkgqgt.supabase.co','sb_publishable_dGgKw7TNY8Cufp8n9Db3Mw_7U9X942W',{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
 let authUser=null,onlinePetsLoaded=false;const pendingFiles={};let postSubmitting=false,postFeedback='',lastSubmittedPet=null,postPhase='';
-async function uploadPending(bucket,kind,key){const files=pendingFiles[kind+':'+key]||[];const uploaded=[];for(const file of files){if(file.size>20971520)throw Error('单个附件不可超过20MB');const suffix=(file.name.split('.').pop()||'bin').toLowerCase();const path=authUser.id+'/'+crypto.randomUUID()+'.'+suffix;const {error}=await api.storage.from(bucket).upload(path,file,{upsert:false,contentType:file.type});if(error)throw Error(error.message);uploaded.push(path)}return uploaded;}
+async function uploadPending(bucket,kind,key){
+const files=pendingFiles[kind+':'+key]||[],uploaded=[];
+for(const file of files){
+if(file.size>20971520)throw Error('单个附件不可超过20MB');
+const suffix=(file.name.split('.').pop()||'bin').toLowerCase();
+const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
+const hash=Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,'0')).join('');
+const path=authUser.id+'/'+kind+'-'+key+'-'+hash+'.'+suffix;
+const {error}=await api.storage.from(bucket).upload(path,file,{upsert:false,contentType:file.type});
+if(error&&!String(error.message||'').toLowerCase().includes('already exists')&&String(error.statusCode||'')!=='409')throw Error(error.message);
+uploaded.push(path);
+}
+return uploaded;
+}
 async function refreshAuth(){const {data:{user}}=await api.auth.getUser();authUser=user||null;return authUser;}
 let authMode='register';
 function authPanel(){return '<div class="card"><h3>欢迎来到杭州宠伴</h3><div class="options"><button class="option '+(authMode==='register'?'selected':'')+'" onclick="authMode=\'register\';render()">注册账号</button><button class="option '+(authMode==='login'?'selected':'')+'" onclick="authMode=\'login\';render()">已有账号登录</button></div><p class="desc">'+(authMode==='register'?'首次使用请填写邮箱并设置密码。注册成功后自动登录。':'使用注册时的邮箱和密码登录。')+'</p><div class="field"><label>邮箱地址</label><input id="loginEmail" type="email" autocomplete="username" placeholder="请输入常用邮箱"></div><div class="field"><label>'+(authMode==='register'?'设置密码':'登录密码')+'</label><input id="loginPassword" type="password" autocomplete="'+(authMode==='register'?'new-password':'current-password')+'" placeholder="至少8位密码"></div>'+(authMode==='register'?'<div class="field"><label>确认密码</label><input id="repeatPassword" type="password" autocomplete="new-password" placeholder="再次输入密码"></div><label class="check"><input id="termsAccepted" type="checkbox"> 我已阅读并同意用户协议与隐私政策</label><p class="small">当前为测试开放注册，请勿填写真实住址、身份证或敏感个人资料。</p>':'')+btn(authMode==='register'?'注册并登录':'登录',"submitAuth()")+'</div>';}
